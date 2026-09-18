@@ -3,7 +3,6 @@ import mediapipe as mp
 import wayland_automation as wa
 import urllib.request
 import os
-from screeninfo import get_monitors
 
 MODEL_PATH = "face_landmarker.task"
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
@@ -64,10 +63,6 @@ cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
     raise RuntimeError("Could not open camera")
-
-# -----------------------------
-# Wayland mouse
-# -----------------------------
 
 mouse = wa.Mouse()
 

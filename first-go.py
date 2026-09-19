@@ -3,6 +3,7 @@ import mediapipe as mp
 import wayland_automation as wa
 import urllib.request
 import os
+import subprocess
 
 MODEL_PATH = "face_landmarker.task"
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
@@ -11,14 +12,8 @@ if not os.path.exists(MODEL_PATH):
     print("Downloading face landmark model...")
     urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
 
-import subprocess
-
-
 def get_screen_size():
-    output = subprocess.check_output(
-        ["xrandr"],
-        text=True
-    )
+    output = subprocess.check_output( ["xrandr"], text=True)
 
     for line in output.splitlines():
         if "*" in line:
@@ -31,14 +26,16 @@ def get_screen_size():
 
 SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_size()
 
-print(SCREEN_WIDTH, SCREEN_HEIGHT)
+# print(SCREEN_WIDTH, SCREEN_HEIGHT)
 
 
 
-CAMERA_X_MIN = 0.15
-CAMERA_X_MAX = 0.85
-CAMERA_Y_MIN = 0.15
-CAMERA_Y_MAX = 0.85
+SMOOTH = 0.5  # 0 = frozen, 1 = no smoothing
+
+CAMERA_X_MIN = 0.35
+CAMERA_X_MAX = 0.65
+CAMERA_Y_MIN = 0.35
+CAMERA_Y_MAX = 0.65
 
 def map_range(value, in_min, in_max, out_min, out_max):
     value = max(in_min, min(value, in_max))
@@ -65,6 +62,8 @@ if not cap.isOpened():
     raise RuntimeError("Could not open camera")
 
 mouse = wa.Mouse()
+
+smooth_x = smooth_y = None
 
 with mp.tasks.vision.FaceLandmarker.create_from_options(options) as landmarker:
 
@@ -107,10 +106,14 @@ with mp.tasks.vision.FaceLandmarker.create_from_options(options) as landmarker:
                 SCREEN_HEIGHT
             )
 
-            screen_x = int(screen_x)
-            screen_y = int(screen_y)
+            # exponential moving average to reduce jitter
+            if smooth_x is None:
+                smooth_x, smooth_y = screen_x, screen_y
+            else:
+                smooth_x = SMOOTH * screen_x + (1 - SMOOTH) * smooth_x
+                smooth_y = SMOOTH * screen_y + (1 - SMOOTH) * smooth_y
 
-            mouse.click(screen_x, screen_y, "nothing")
+            mouse.click(int(smooth_x), int(smooth_y), "nothing")
 
             px = int(nx * w)
             py = int(ny * h)
@@ -123,15 +126,8 @@ with mp.tasks.vision.FaceLandmarker.create_from_options(options) as landmarker:
                 -1
             )
 
-            cv2.putText(
-                frame,
-                f"Screen: ({screen_x}, {screen_y})",
-                (px + 10, py - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 255, 255),
-                1
-            )
+            cv2.putText(frame, f"Screen: ({screen_x}, {screen_y})",
+                (px + 10, py - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
         cv2.imshow("Face Cursor", frame)
 

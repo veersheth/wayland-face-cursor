@@ -13,100 +13,81 @@ if not os.path.exists(MODEL_PATH):
     urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
 
 def get_screen_size():
-    output = subprocess.check_output( ["xrandr"], text=True)
-
+    output = subprocess.check_output(["xrandr"], text=True)
     for line in output.splitlines():
         if "*" in line:
-            resolution = line.split()[0]
-            width, height = map(int, resolution.split("x"))
+            width, height = map(int, line.split()[0].split("x"))
             return width, height
-
     raise RuntimeError("Could not determine screen size")
-
 
 SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_size()
 
-# print(SCREEN_WIDTH, SCREEN_HEIGHT)
+SMOOTH     = 0.2    # 0 = frozen, 1 = no smoothing
+DEAD_ZONE  = 0.02   
 
-
-
-SMOOTH = 0.5  # 0 = frozen, 1 = no smoothing
-
-CAMERA_X_MIN = 0.35
-CAMERA_X_MAX = 0.65
-CAMERA_Y_MIN = 0.35
-CAMERA_Y_MAX = 0.65
+HEAD_X_RANGE = 0.3
+HEAD_Y_MIN   = 0.1
+HEAD_Y_MAX   = 0.6
 
 def map_range(value, in_min, in_max, out_min, out_max):
     value = max(in_min, min(value, in_max))
-
-    return (
-        (value - in_min)
-        * (out_max - out_min)
-        / (in_max - in_min)
-        + out_min
-    )
-
+    return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 options = mp.tasks.vision.FaceLandmarkerOptions(
-    base_options=mp.tasks.BaseOptions(
-        model_asset_path=MODEL_PATH
-    ),
+    base_options=mp.tasks.BaseOptions(model_asset_path=MODEL_PATH),
     running_mode=mp.tasks.vision.RunningMode.IMAGE,
     num_faces=1,
 )
 
 cap = cv2.VideoCapture(0)
-
 if not cap.isOpened():
     raise RuntimeError("Could not open camera")
 
 mouse = wa.Mouse()
-
 smooth_x = smooth_y = None
+prev_head_x = prev_head_y = None
+
+
 
 with mp.tasks.vision.FaceLandmarker.create_from_options(options) as landmarker:
-
     while True:
         ret, frame = cap.read()
-
         if not ret:
             continue
 
-        frame = cv2.flip(frame, 1) # mirror cam
-
+        frame = cv2.flip(frame, 1)
         h, w = frame.shape[:2]
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image = mp.Image( image_format=mp.ImageFormat.SRGB, data=rgb)
 
-        result = landmarker.detect(image)
+        result = landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
 
         if result.face_landmarks:
-
             landmarks = result.face_landmarks[0]
 
-            nose = landmarks[4]
+            # face 
+            left_eye  = landmarks[33]
+            right_eye = landmarks[263]
+            nose      = landmarks[4]
 
-            nx = nose.x
-            ny = nose.y
+            cx = (left_eye.x + right_eye.x) / 2
+            cy = (left_eye.y + right_eye.y) / 2
+            face_w = abs(right_eye.x - left_eye.x) + 1e-6
 
-            screen_x = map_range(
-                nx,
-                CAMERA_X_MIN,
-                CAMERA_X_MAX,
-                0,
-                SCREEN_WIDTH
-            )
+            # relative nose
+            head_x = (nose.x - cx) / face_w
+            head_y = (nose.y - cy) / face_w
 
-            screen_y = map_range(
-                ny,
-                CAMERA_Y_MIN,
-                CAMERA_Y_MAX,
-                0,
-                SCREEN_HEIGHT
-            )
+            # dead zone
+            if prev_head_x is not None:
+                dx = abs(head_x - prev_head_x)
+                dy = abs(head_y - prev_head_y)
+                if dx < DEAD_ZONE and dy < DEAD_ZONE:
+                    head_x, head_y = prev_head_x, prev_head_y
 
-            # exponential moving average to reduce jitter
+            prev_head_x, prev_head_y = head_x, head_y
+
+            screen_x = map_range(head_x, -HEAD_X_RANGE, HEAD_X_RANGE, 0, SCREEN_WIDTH)
+            screen_y = map_range(head_y,  HEAD_Y_MIN,   HEAD_Y_MAX,   0, SCREEN_HEIGHT)
+
             if smooth_x is None:
                 smooth_x, smooth_y = screen_x, screen_y
             else:
@@ -115,25 +96,16 @@ with mp.tasks.vision.FaceLandmarker.create_from_options(options) as landmarker:
 
             mouse.click(int(smooth_x), int(smooth_y), "nothing")
 
-            px = int(nx * w)
-            py = int(ny * h)
+            px, py = int(nose.x * w), int(nose.y * h)
 
-            cv2.circle(
-                frame,
-                (px, py),
-                6,
-                (0, 255, 255),
-                -1
-            )
+            cv2.circle(frame, (px, py), 6, (0, 255, 255), -1)
 
-            cv2.putText(frame, f"Screen: ({screen_x}, {screen_y})",
-                (px + 10, py - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+            cv2.putText(frame, f"head=({head_x:.2f}, {head_y:.2f})  screen=({int(smooth_x)}, {int(smooth_y)})",
+                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
         cv2.imshow("Face Cursor", frame)
-
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-
 
 cap.release()
 cv2.destroyAllWindows()

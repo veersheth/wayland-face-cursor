@@ -17,6 +17,6 @@ class Config:
     head_y_max   = 0.6
 
     # precision mode
-    precision_speed    = 0.25
-    mouth_close_threshold = 0.5
-    mouth_close_frames    = 3
+    precision_speed      = 0.25
+    mouth_open_threshold = 0.08  # lip distance / face_width ratio to trigger
+    mouth_open_frames    = 3 # min frames before detecting

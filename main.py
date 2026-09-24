@@ -1,7 +1,7 @@
 import cv2
 
 from config import Config
-from face   import load_landmarker, detect, face_relative_nose
+from face   import load_landmarker, detect, face_relative_nose, detect_precision_mode, detect_blink
 from cursor import get_screen_size, apply_dead_zone, map_to_screen, apply_smooth, move, make_mouse
 
 cfg      = Config()

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import mediapipe as mp
 import urllib.request
 import os

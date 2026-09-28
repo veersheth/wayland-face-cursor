@@ -39,6 +39,21 @@ def apply_smooth(screen_x, screen_y, smooth_x, smooth_y, alpha):
     )
 
 
+def head_to_velocity(hx, hy, cfg, precise=False):
+    """Displacement from neutral head position → cursor velocity (px/frame).
+    Dead zone around neutral suppresses jitter when holding still.
+    """
+    dx = hx - cfg.neutral_x
+    dy = hy - cfg.neutral_y
+
+    if abs(dx) < cfg.dead_zone: dx = 0
+    if abs(dy) < cfg.dead_zone: dy = 0
+
+    speed = cfg.cursor_speed_fast if precise else cfg.cursor_speed
+    vy = dy * speed * (1.2 if dy > 0 else 1.0)
+    return dx * speed, vy
+
+
 def move(mouse, x, y):
     mouse.click(int(x), int(y), "nothing")
 

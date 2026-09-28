@@ -11,13 +11,11 @@ class Config:
     dead_zone         = 0.02
     dead_zone_precise = 0.005
 
-    # head range
-    head_x_range = 0.3
-    head_y_min   = 0.1
-    head_y_max   = 0.6
+    neutral_x    = 0.0  
+    neutral_y    = 0.45  
+    cursor_speed      = 90   
+    cursor_speed_fast = 240   
 
-    # precision mode
-    precision_speed      = 0.25
     mouth_open_threshold = 0.08
     mouth_open_frames    = 3
 
